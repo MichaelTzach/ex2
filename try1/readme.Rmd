@@ -84,4 +84,4 @@ write.csv(res,file="try1.csv",row.names = F)
 
 # Results
 
-![Kaggle Screenshot](KaggleScreenshot.jpg?raw=true "Screenshot")
+![Kaggle Screenshot](https://github.com/MichaelTzach/ex2/blob/master/try1/KaggleScreenshot.png?raw=true "Screenshot")
