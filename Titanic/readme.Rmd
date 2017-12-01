@@ -1,0 +1,86 @@
+---
+title: "Try1 Titanic Challenge"
+author: "Michael Tzach"
+date: "12/1/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# First attempt at submission
+The first attempt at submission to Kaggle used the very basic C50 prediction model.
+
+setting up the workspace
+The training and test files are in the /Titnic directory
+```{r}
+workspaceDir = "/Users/michaeltzach/Developer/R/ex2/Titanic"
+setwd(workspaceDir)
+```
+
+
+We load the training file and change the Survived and Pclass columns to be factors since they are clearly class vars
+```{r}
+trainingData <- read.csv("train.csv", na.string="")
+trainingData$Survived = factor(trainingData$Survived)
+trainingData$Pclass = factor(trainingData$Pclass)
+```
+
+We remove unwanted columns that have no influence on the probability of the person to survive.
+We might in the future add the Name column and process it to get the person's title.
+```{r}
+trainingData = subset(trainingData, select=-c(Name, Ticket, Cabin, PassengerId))
+```
+
+We do the same for the test data so we can run it.
+Before removing the passengerId data, we save it so we can use it later for creating the submission file.
+```{r}
+testData = read.csv("test.csv", na.string="")
+#testData$Survived = factor(testData$Survived)
+#testData$Pclass = factor(testData$Pclass)
+
+testDataPassengerIds = testData$PassengerId
+testData = subset(testData, select=-c(Name, Ticket, Cabin, PassengerId))
+```
+
+Divide the training set to 0.75-0.25 parts to get a cofusion matrix and test model's accuracy
+```{r}
+indices <- sample(1:nrow(trainingData),nrow(trainingData)*0.75)
+trainingData.train = trainingData[indices,]
+trainingData.test<- trainingData[-indices,]
+```
+
+Install the C50 lib and create a model. We also want to set a seed for random so we get the same results during testing
+We create the model based on trainingData.train
+```{r}
+if(!require(C50)){
+  install.packages('C50')
+}
+library('C50')
+set.seed(123)
+
+C50training <-C5.0(Survived ~., data=trainingData.train )
+```
+
+For the understanding of how well our model works we print some stats on how it predicted the results in the test portion of the training data
+```{r}
+trainingPredictions = predict(C50training, trainingData.test)
+table(trainingPredictions,trainingData.test$Survived)
+mean(trainingPredictions==trainingData.test$Survived)
+```
+
+We retrain the model on the complete training data set to get better results.
+We create predictions on the test data set and write it to a file after binding it to the passenger ids.
+```{r}
+C50 <-C5.0(Survived ~., data=trainingData )
+plot(C50training)
+testPredictions = predict(C50training, testData)
+
+#Create the result of the prediction
+res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(testPredictions))
+write.csv(res,file="try1.csv",row.names = F)
+```
+
+# Results
+

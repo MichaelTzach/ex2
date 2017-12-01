@@ -81,3 +81,7 @@ testPredictions = predict(C50training, testData)
 res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(testPredictions))
 write.csv(res,file="try1.csv",row.names = F)
 ```
+
+# Results
+
+![Kaggle Screenshot](KaggleScreenshot.jpg?raw=true "Screenshot")
