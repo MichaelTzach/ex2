@@ -9,7 +9,6 @@ mapNamesToTitles = function(y) {
   namesAsChars = lapply(y, as.character)
   firstPartOfNamesBeforeDots = lapply(namesAsChars, function(x) strsplit(x, '.', fixed = TRUE)[[1]][[1]])
   titlesPartOfNamesAsList = lapply(firstPartOfNamesBeforeDots, function(x) strsplit(x, ', ', fixed = TRUE)[[1]][[2]])
-  #titlesPartOfNamesAsList = lapply(titlesPartOfNamesAsList, function(x) if (x == "Dona") NA else x)
   return(factor(unlist(titlesPartOfNamesAsList)))
 }
 
@@ -34,11 +33,6 @@ trainingData = dataFromFile("train.csv", FALSE)
 testData = dataFromFile("test.csv", TRUE)
 testDataPassengerIds<- testData$PassengerId
 testData = subset(testData, select=-c(PassengerId))
-
-##Divide the training data to a training part and evaluation part
-#indices <- sample(1:nrow(trainingData),nrow(trainingData)*0.75)
-#trainingData.train<- trainingData[indices,]
-#trainingData.test<- trainingData[-indices,]
 
 #install C50 and add the lib
 if(!require(C50)){
@@ -76,21 +70,9 @@ library(e1071)
 
 control <- trainControl(method="cv", number=10)
 fit.c50 <- train(Survived~., data=trainingData, method="C5.0", metric="Accuracy", trControl=control,na.action = na.pass)
-fit.c50$xlevels[["Title"]] <- union(fit.c50$xlevels[["Title"]], levels(testData$Cabin))
+fit.c50$xlevels[["Title"]] <- union(fit.c50$xlevels[["Title"]], levels(testData$Title))
 
 testPredictions = predict(fit.c50,testData,na.action = na.pass)
-#Use C50 and predict on the test part
-#C50training <-C5.0(Survived ~., data=trainingData.train )
-#plot(C50training)
-
-#trainingPredictions = predict(C50training, trainingData.test)
-#table(trainingPredictions,trainingData.test$Survived)
-#mean(trainingPredictions==trainingData.test$Survived)
-
-#Create a prediction on the full training data and run it on the test data
-#C50 <-C5.0(Survived ~., data=trainingData )
-#plot(C50)
-#testPredictions = predict(C50training, testData)
 
 #Create the result of the prediction
 res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(testPredictions))
