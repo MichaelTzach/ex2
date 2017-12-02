@@ -1,0 +1,136 @@
+---
+title: "Try1 Titanic Challenge"
+author: "Michael Tzach"
+date: "12/1/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+workspaceDir = "/Users/michaeltzach/Developer/R/ex2/Titanic"
+knitr::opts_knit$set(root.dir = workspaceDir)
+```
+
+# Second attempt at submission
+The second attempt at submission to Kaggle used the caret library and tried to take into account the title of the person.
+
+# Loading and Preprccessing
+
+We run the same loading and preproccesing function for both the training and test data sets.
+What we try to do is to use the person's title for the modeling.
+We can later see in the plots that some people with some titles had more or less chances of survival.
+```{r}
+mapNamesToTitles = function(y) {
+  namesAsChars = lapply(y, as.character)
+  firstPartOfNamesBeforeDots = lapply(namesAsChars, function(x) strsplit(x, '.', fixed = TRUE)[[1]][[1]])
+  titlesPartOfNamesAsList = lapply(firstPartOfNamesBeforeDots, function(x) strsplit(x, ', ', fixed = TRUE)[[1]][[2]])
+  return(factor(unlist(titlesPartOfNamesAsList)))
+}
+
+preprocessData = function(data, isTestData) {
+  data$Pclass = factor(data$Pclass)
+  data$Title = mapNamesToTitles(data$Name)
+  if (isTestData) {
+    data = subset(data, select=-c(Ticket, Cabin, Name))  
+  } else {
+    data$Survived = factor(data$Survived)
+    data = subset(data, select=-c(Ticket, Cabin, PassengerId, Name))  
+  }
+}
+
+dataFromFile = function(fileName, isTestData) {
+  data = read.csv(fileName, na.string="")
+  preprocessedData = preprocessData(data, isTestData)
+  return(preprocessedData)
+}
+
+trainingData = dataFromFile("train.csv", FALSE)
+testData = dataFromFile("test.csv", TRUE)
+testDataPassengerIds<- testData$PassengerId
+testData = subset(testData, select=-c(PassengerId))
+```
+
+Install and load needed libraries
+```{r}
+if(!require(C50)){
+  install.packages('C50')
+}
+library('C50')
+if(!require(tidyr)) {
+  install.packages("tidyr")
+}
+library(tidyr)
+if(!require(ggplot2)) {
+  install.packages("ggplot2")
+}
+library(ggplot2)
+if(!require(caret)) {
+  install.packages("caret")
+}
+library(caret)
+if(!require(e1071)) {
+  install.packages("e1071")
+}
+library(e1071)
+if(!require(rpart)) {
+  install.packages('rpart')
+}
+if(!require(rpart)) {
+  install.packages('rpart')
+}
+library(rpart)
+if(!require(rattle)) {
+  install.packages("rattle", dependencies=TRUE)
+}
+library(rattle)
+if(!require(rpart.plot)) {
+  install.packages('rpart.plot')
+}
+library(rpart.plot)
+set.seed(123)
+```
+
+We want to understand the data better so we plot the different variables after cleaning the data a bit
+```{r}
+trainingData.Cols<- 1:dim(trainingData)[2]
+trainingData.factors <- trainingData.Cols[sapply(trainingData,is.factor)]
+trainingData.numerics <- trainingData.Cols[!sapply(trainingData,is.factor)]
+trainingData.tidy_factors<-gather(trainingData[,trainingData.factors],"feature","value",-1)
+trainingData.tidy_numerics<-gather(cbind(Survived=trainingData[,1],trainingData[,trainingData.numerics]),"feature","value",-1)
+```
+
+## Factors plot
+First we can look at the factors.
+We can see that the Pclass has a lot of clear variance between different classes. This is expected since the upper classes had a lot more chances of getting to the deck in time to escape.
+The titles and sex are somewhat related. We can see that males had a lower chance of survival.
+```{r}
+qplot(x=value,data=trainingData.tidy_factors,fill=Survived) + facet_grid(~feature,scales="free")
+```
+
+When we look at non-factor data, we can see that children had higher chances of survival.
+There is a clear relation between the fare and the survival rate. This goes together with the pclass.
+People with no siblings had less chances of survival than those with at least one sibling. Same goes for passengers with or without parents or children.
+```{r}
+qplot(x=value,data=trainingData.tidy_numerics,fill=Survived) + facet_grid(~feature,scales="free")
+```
+
+## Training and predictions
+
+We train the model with the caret library.
+We need to then union the Title factor levels between the test and the training data since the test data has an additional level ("Dona")
+```{r}
+control <- trainControl(method="cv", number=10)
+fit.c50 <- train(Survived~., data=trainingData, method="C5.0", metric="Accuracy", trControl=control,na.action = na.pass)
+fit.c50$xlevels[["Title"]] <- union(fit.c50$xlevels[["Title"]], levels(testData$Title))
+```
+
+Make the predictions and write them to a file
+```{r}
+fit.c50.testPredictions = predict(fit.c50,testData,na.action = na.pass)
+fit.c50.res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(fit.c50.testPredictions))
+```
+
+# Results
+We got better results from the caret library
+
+![Kaggle Screenshot](https://github.com/MichaelTzach/ex2/blob/master/try2/KaggleScreenshot.png?raw=true "Screenshot")

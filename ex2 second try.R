@@ -72,28 +72,8 @@ control <- trainControl(method="cv", number=10)
 fit.c50 <- train(Survived~., data=trainingData, method="C5.0", metric="Accuracy", trControl=control,na.action = na.pass)
 fit.c50$xlevels[["Title"]] <- union(fit.c50$xlevels[["Title"]], levels(testData$Title))
 
-fit.c50.testPredictions = predict(fit.c50,testData,na.action = na.pass)
+testPredictions = predict(fit.c50,testData,na.action = na.pass)
 
 #Create the result of the prediction
-fit.c50.res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(fit.c50.testPredictions))
-
-#Create the rpart model
-if(!require(rpart)) {
-  install.packages('rpart')
-}
-library(rpart)
-if(!require(rattle)) {
-  install.packages("rattle", dependencies=TRUE)
-}
-library(rattle)
-if(!require(rpart.plot)) {
-  install.packages('rpart.plot')
-}
-library(rpart.plot)
-
-rpart.trainingDataModel <- rpart(Survived~., data = trainingData)
-
-#Plot the rpart model
-fancyRpartPlot(rpart.trainingDataModel)
-
-#write.csv(fit.c50.res,file="try3.csv",row.names = F)
+res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(testPredictions))
+write.csv(res,file="try2.csv",row.names = F)
