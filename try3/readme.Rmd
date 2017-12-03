@@ -1,5 +1,5 @@
 ---
-title: "Try1 Titanic Challenge"
+title: "Try3 Titanic Challenge"
 author: "Michael Tzach"
 date: "12/1/2017"
 output: html_document
@@ -24,6 +24,7 @@ mapNamesToTitles = function(y) {
   namesAsChars = lapply(y, as.character)
   firstPartOfNamesBeforeDots = lapply(namesAsChars, function(x) strsplit(x, '.', fixed = TRUE)[[1]][[1]])
   titlesPartOfNamesAsList = lapply(firstPartOfNamesBeforeDots, function(x) strsplit(x, ', ', fixed = TRUE)[[1]][[2]])
+  titlesPartOfNamesAsList = lapply(titlesPartOfNamesAsList, function(x) if (x == "Dona") NA else x)
   return(factor(unlist(titlesPartOfNamesAsList)))
 }
 
@@ -46,6 +47,7 @@ dataFromFile = function(fileName, isTestData) {
 
 trainingData = dataFromFile("train.csv", FALSE)
 testData = dataFromFile("test.csv", TRUE)
+testDataWithPassengerIds = testData
 testDataPassengerIds<- testData$PassengerId
 testData = subset(testData, select=-c(PassengerId))
 ```
@@ -149,7 +151,80 @@ We can see again that certain titles (especially male titles) had lower chances 
 fancyRpartPlot(rpart.trainingDataModel)
 ```
 
-# Results
-We got better results from the caret library
+# Ensamble
 
-![Kaggle Screenshot](https://github.com/MichaelTzach/ex2/blob/master/try2/KaggleScreenshot.png?raw=true "Screenshot")
+We need to clean the data for the ensamble method
+```{r}
+#Clean up the data for the ensamble
+cleanUpBeforeEnsamble = function(data) {
+  data = na.omit(data)
+  feature.names=names(data)
+  for (f in feature.names) {
+    if (class(data[[f]])=="factor") {
+      levels <- unique(c(data[[f]]))
+      data[[f]] <- factor(data[[f]],labels=make.names(levels))
+    }
+  }
+  return(data)
+}
+trainingData = cleanUpBeforeEnsamble(trainingData)
+```
+
+Since we ommited data from the test data, we need to later combine the ensamble predictions with a previous method.
+```{r}
+testData = cleanUpBeforeEnsamble(testDataWithPassengerIds)
+passengerIdsPredictedWithensamble = testData$PassengerId
+passengerIdsNotPredictedWithEnsamble = testDataPassengerIds[!(testDataPassengerIds %in% passengerIdsPredictedWithensamble)]
+testData = subset(testData, select=-c(PassengerId))  
+```
+
+Creating the ensamble model,
+We use two specs: one using c50 and the other using xgbTree. The parameters have been tuned to get best results
+```{r}
+ensambleModel.TrainControl = trainControl(method = "cv", number = 10, savePredictions='final', classProbs=TRUE)
+ensambleModel.tuneList.C50 = caretModelSpec(method="C5.0",tuneGrid=data.frame(.trials=50, .model = 'tree', .winnow =FALSE))
+ensambleModel.tuneList.XCGT = caretModelSpec(
+    method = "xgbTree",
+    tuneGrid = data.frame(
+      .nrounds=30,
+      .max_depth=3,
+      .eta=0.4,
+      .gamma=0.1,
+      .colsample_bytree=0.7,
+      .min_child_weight=0.01,
+      .subsample=0.7
+    )
+  )  
+ensambleModel.tuneList = list(C50=ensambleModel.tuneList.C50, xgbTree=ensambleModel.tuneList.XCGT)
+modelsForEnsamble<-caretList(Survived~., data=trainingData, trControl=ensambleModel.TrainControl, metric="Accuracy",tuneList=ensambleModel.tuneList)
+```
+
+Create the results.
+We usually get a mean result of 0.82 for both methods
+```{r}
+resultsFromEnsamble <- resamples(modelsForEnsamble)
+summary(resultsFromEnsamble)
+```
+
+We predict the ensamle on the test data subset without the ommited values
+```{r}
+ensamble <- caretEnsemble(modelsForEnsamble)
+ensamblePredictions = predict(ensamble, newdata=testData, type="raw")
+```
+
+We need to bind the data from the ensamble with another method.
+We get the ensamble results and combine it with a subset of the results from the recursive partitioning for the passenger ids that were ommited when cleaning the data for the ensamble.
+```{r}
+ensamblePredictions = unlist(lapply(as.character(ensamblePredictions), function(x) if (x == "X1") 0 else 1))
+ensamblePredictions.res <- cbind(PassengerId=passengerIdsPredictedWithensamble,Survived=ensamblePredictions)
+rpartResultsToCompleteResults = rpart.res[rpart.res[, "PassengerId"] %in% passengerIdsNotPredictedWithEnsamble,]
+finalResults = rbind(ensamblePredictions.res, rpartResultsToCompleteResults)
+```
+
+```{r}
+write.csv(finalResults,file="try3.csv",row.names = F)
+```
+
+# Results
+
+![Kaggle Screenshot](https://github.com/MichaelTzach/ex2/blob/master/try3/KaggleScreenshot.png?raw=true "Screenshot")

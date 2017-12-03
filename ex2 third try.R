@@ -120,7 +120,6 @@ cleanUpBeforeEnsamble = function(data) {
 }
 trainingData = cleanUpBeforeEnsamble(trainingData)
 
-#todo- split test ids befor omit
 testData = cleanUpBeforeEnsamble(testDataWithPassengerIds)
 passengerIdsPredictedWithensamble = testData$PassengerId
 passengerIdsNotPredictedWithEnsamble = testDataPassengerIds[!(testDataPassengerIds %in% passengerIdsPredictedWithensamble)]
@@ -150,7 +149,7 @@ ensamble <- caretEnsemble(modelsForEnsamble)
 ensamblePredictions = predict(ensamble, newdata=testData, type="raw")
 ensamblePredictions = unlist(lapply(as.character(ensamblePredictions), function(x) if (x == "X1") 0 else 1))
 ensamblePredictions.res <- cbind(PassengerId=passengerIdsPredictedWithensamble,Survived=ensamblePredictions)
-c50FitResultsToCompleteResults = rpart.res[rpart.res[, "PassengerId"] %in% passengerIdsNotPredictedWithEnsamble,]
-finalResults = rbind(ensamblePredictions.res, c50FitResultsToCompleteResults)
+rpartResultsToCompleteResults = rpart.res[rpart.res[, "PassengerId"] %in% passengerIdsNotPredictedWithEnsamble,]
+finalResults = rbind(ensamblePredictions.res, rpartResultsToCompleteResults)
 
 write.csv(finalResults,file="try3.csv",row.names = F)
