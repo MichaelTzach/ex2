@@ -9,6 +9,7 @@ mapNamesToTitles = function(y) {
   namesAsChars = lapply(y, as.character)
   firstPartOfNamesBeforeDots = lapply(namesAsChars, function(x) strsplit(x, '.', fixed = TRUE)[[1]][[1]])
   titlesPartOfNamesAsList = lapply(firstPartOfNamesBeforeDots, function(x) strsplit(x, ', ', fixed = TRUE)[[1]][[2]])
+  titlesPartOfNamesAsList = lapply(titlesPartOfNamesAsList, function(x) if (x == "Dona") NA else x)
   return(factor(unlist(titlesPartOfNamesAsList)))
 }
 
@@ -31,6 +32,7 @@ dataFromFile = function(fileName, isTestData) {
 
 trainingData = dataFromFile("train.csv", FALSE)
 testData = dataFromFile("test.csv", TRUE)
+testDataWithPassengerIds = testData
 testDataPassengerIds<- testData$PassengerId
 testData = subset(testData, select=-c(PassengerId))
 
@@ -83,7 +85,7 @@ if(!require(rpart)) {
 }
 library(rpart)
 if(!require(rattle)) {
-  install.packages("rattle", dependencies=TRUE)
+  install.packages("https://togaware.com/access/rattle_5.0.14.tar.gz", repos=NULL, type="source")
 }
 library(rattle)
 if(!require(rpart.plot)) {
@@ -91,9 +93,64 @@ if(!require(rpart.plot)) {
 }
 library(rpart.plot)
 
+#Use recursive partitioning to have more predictions
 rpart.trainingDataModel <- rpart(Survived~., data = trainingData)
+rpart.predictions <- predict(rpart.trainingDataModel, testData,type = "class")
+rpart.res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(rpart.predictions))
 
 #Plot the rpart model
 fancyRpartPlot(rpart.trainingDataModel)
 
-#write.csv(fit.c50.res,file="try3.csv",row.names = F)
+if(!require(caretEnsemble)) {
+  install.packages('caretEnsemble')
+}
+library(caretEnsemble)
+
+#Clean up the data for the ensamble
+cleanUpBeforeEnsamble = function(data) {
+  data = na.omit(data)
+  feature.names=names(data)
+  for (f in feature.names) {
+    if (class(data[[f]])=="factor") {
+      levels <- unique(c(data[[f]]))
+      data[[f]] <- factor(data[[f]],labels=make.names(levels))
+    }
+  }
+  return(data)
+}
+trainingData = cleanUpBeforeEnsamble(trainingData)
+
+#todo- split test ids befor omit
+testData = cleanUpBeforeEnsamble(testDataWithPassengerIds)
+passengerIdsPredictedWithensamble = testData$PassengerId
+passengerIdsNotPredictedWithEnsamble = testDataPassengerIds[!(testDataPassengerIds %in% passengerIdsPredictedWithensamble)]
+testData = subset(testData, select=-c(PassengerId))  
+  
+ensambleModel.TrainControl = trainControl(method = "cv", number = 10, savePredictions='final', classProbs=TRUE)
+ensambleModel.tuneList.C50 = caretModelSpec(method="C5.0",tuneGrid=data.frame(.trials=50, .model = 'tree', .winnow =FALSE))
+ensambleModel.tuneList.XCGT = caretModelSpec(
+    method = "xgbTree",
+    tuneGrid = data.frame(
+      .nrounds=30,
+      .max_depth=3,
+      .eta=0.4,
+      .gamma=0.1,
+      .colsample_bytree=0.7,
+      .min_child_weight=0.01,
+      .subsample=0.7
+    )
+  )  
+ensambleModel.tuneList = list(C50=ensambleModel.tuneList.C50, xgbTree=ensambleModel.tuneList.XCGT)
+modelsForEnsamble<-caretList(Survived~., data=trainingData, trControl=ensambleModel.TrainControl, metric="Accuracy",tuneList=ensambleModel.tuneList)
+
+resultsFromEnsamble <- resamples(modelsForEnsamble)
+summary(resultsFromEnsamble)
+
+ensamble <- caretEnsemble(modelsForEnsamble)
+ensamblePredictions = predict(ensamble, newdata=testData, type="raw")
+ensamblePredictions = unlist(lapply(as.character(ensamblePredictions), function(x) if (x == "X1") 0 else 1))
+ensamblePredictions.res <- cbind(PassengerId=passengerIdsPredictedWithensamble,Survived=ensamblePredictions)
+c50FitResultsToCompleteResults = rpart.res[rpart.res[, "PassengerId"] %in% passengerIdsNotPredictedWithEnsamble,]
+finalResults = rbind(ensamblePredictions.res, c50FitResultsToCompleteResults)
+
+write.csv(finalResults,file="try3.csv",row.names = F)

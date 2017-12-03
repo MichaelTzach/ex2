@@ -11,8 +11,8 @@ workspaceDir = "/Users/michaeltzach/Developer/R/ex2/Titanic"
 knitr::opts_knit$set(root.dir = workspaceDir)
 ```
 
-# Second attempt at submission
-The second attempt at submission to Kaggle used the caret library and tried to take into account the title of the person.
+# Third attempt at submission
+The third attempt at submission to Kaggle used ensembles over previous model and recursive partitioning.
 
 # Loading and Preprccessing
 
@@ -87,6 +87,10 @@ if(!require(rpart.plot)) {
   install.packages('rpart.plot')
 }
 library(rpart.plot)
+if(!require(caretEnsemble)) {
+  install.packages('caretEnsemble')
+}
+library(caretEnsemble)
 set.seed(123)
 ```
 
@@ -128,6 +132,21 @@ Make the predictions and write them to a file
 ```{r}
 fit.c50.testPredictions = predict(fit.c50,testData,na.action = na.pass)
 fit.c50.res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(fit.c50.testPredictions))
+```
+
+### Recursive partitioning
+
+We create results for the recursive partitioning.
+```{r}
+rpart.trainingDataModel <- rpart(Survived~., data = trainingData)
+rpart.predictions <- predict(rpart.trainingDataModel, testData,type = "class")
+rpart.res <- cbind(PassengerId=testDataPassengerIds,Survived=as.character(rpart.predictions))
+```
+
+This helps us with better understanding the data.
+We can see again that certain titles (especially male titles) had lower chances of survival and that the Pclass had a big influence. 
+```{r}
+fancyRpartPlot(rpart.trainingDataModel)
 ```
 
 # Results
